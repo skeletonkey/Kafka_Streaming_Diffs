@@ -1,0 +1,185 @@
+<html>
+    <head>
+        <script src="jquery-3.4.1.min.js"></script>
+        <script src="jquery.simple.websocket.js"></script>
+        <style>
+            .div-table {
+                display: table;
+                width: auto;
+                background-color: #eee;
+                border: 1px solid #666666;
+            }
+            .div-table-row {
+                display: table-row;
+                width: auto;
+                clear: both;
+            }
+            .div-table-row-number {
+                background-color: #ccc;
+                display: table-column;
+                float: left; /* fix for  buggy browsers */
+                text-align: center;
+                width: 50px;
+            }
+            .div-table-seat-number {
+                background-color: #ccc;
+                display: table-column;
+                float: left; /* fix for  buggy browsers */
+                text-align: center;
+                width: 25px;
+            }
+            .div-table-seat {
+                display: table-column;
+                float: left; /* fix for  buggy browsers */
+                text-align: center;
+                width: 25px;
+            }
+            .div-table-seat-open {
+                background-color: #3399FF;
+                display: table-column;
+                float: left; /* fix for  buggy browsers */
+                text-align: center;
+                width: 25px;
+            }
+            .div-table-seat-hold {
+                background-color: #FFFF00;
+                display: table-column;
+                float: left; /* fix for  buggy browsers */
+                text-align: center;
+                width: 25px;
+            }
+            .div-table-seat-sold {
+                background-color: #990000;
+                display: table-column;
+                float: left; /* fix for  buggy browsers */
+                text-align: center;
+                width: 25px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="div-table" id="event_map">
+            <div class="div-table-row">
+                <div class="div-table-row-number">&nbsp;</div>
+                <div class="div-table-seat-number">1</div>
+                <div class="div-table-seat-number">2</div>
+            </div>
+            <div class="div-table-row">
+                <div class="div-table-row-number">A</div>
+                <div class="div-table-seat-open" id="A1">&nbsp;</div>
+                <div class="div-table-seat-hold" id="A2">&nbsp;</div>
+            </div>
+            <div class="div-table-row">
+                <div class="div-table-row-number">B</div>
+                <div class="div-table-seat-sold" id="B2">&nbsp;</div>
+                <div class="div-table-seat" id="B2">&nbsp;</div>
+            </div>
+            <div class="div-table-row">
+                <div class="div-table-row-number">C</div>
+                <div class="div-table-seat" id="C2">&nbsp;</div>
+                <div class="div-table-seat" id="C2">&nbsp;</div>
+            </div>
+        </div>
+    </body>
+    <script>
+        // Sockets: https://www.html5rocks.com/en/tutorials/websockets/basics/
+        $(document).ready(function() {
+            // $('#event_map').empty();
+            // $('#event_map').add($('div').addClass('div-table-seat-open').html('&nbsp;'));
+
+            // let socket = new WebSocket("wss://javascript.info/article/websocket/demo/hello");
+            let socket = new WebSocket("ws://0.0.0.0:22000/");
+
+            socket.onopen = function(e) {
+                // alert("[open] Connection established");
+                // alert("Sending to server");
+                socket.send("");
+            };
+
+            socket.onmessage = function(event) {
+                // alert(`[message] Data received from server: ${event.data}`);
+                build_event_map(event.data);
+            };
+
+            socket.onclose = function(event) {
+                if (event.wasClean) {
+                    // alert(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+                } else {
+                    // e.g. server process killed or network down
+                    // event.code is usually 1006 in this case
+                    alert('[close] Connection died');
+                }
+            };
+
+            socket.onerror = function(error) {
+                alert(`[error] ${error.message}`);
+            };
+
+            function build_event_map(json_as_string) {
+                seat_map = JSON.parse(json_as_string);
+                var seat_data = {};
+                var max_row = 0;
+                var max_seat = 0;
+                for (var i = 0; i < seat_map.seats.length; i++) {
+                    if (!(seat_map.seats[i].row in seat_data)) {
+                        seat_data[seat_map.seats[i].row] = {};
+                    }
+                    seat_data[seat_map.seats[i].row][seat_map.seats[i].seat] = seat_map.seats[i].status
+                    if (max_row < seat_map.seats[i].row) {
+                        max_row = seat_map.seats[i].row
+                    }
+                    if (max_seat < seat_map.seats[i].seat) {
+                        max_seat = seat_map.seats[i].seat
+                    }
+                }
+
+                // row/seat is 0 based while seats row/seat is 1 based
+                // however row/col 0 will be the labels!
+                $('#event_map').empty();
+                for (var row = 0; row < max_row; row++) {
+                    var row_id = 'row_' + row;
+                    $('#event_map').append($('div').addClass('div-table-row').attr('id', row_id).html('&nbsp;'));
+                    for (var seat = 0; seat < max_seat; seat++) {
+                        if (row == 0) {
+                            if (seat == 0) {
+                                $('#' + row_id).append($('div').addClass('div-table-row-number').html('&nbsp;'));
+                            }
+                            else {
+                                $('#' + row_id).append($('div').addClass('div-table-row-number').html(seat));
+                            }
+                        }
+                        else {
+                            if (seat == 0) {
+                                $('#' + row_id).append($('div').addClass('div-table-row-number').html(get_row_name(row)));
+                            }
+                            else {
+                                $('#' + row_id).append($('div').addClass(get_class(seat_data[row][seat]))).html('&nbsp;');
+                            }
+                        }
+
+                    }
+                }
+            }
+
+            // Need to get this to work with more the 26 rows
+            function get_row_name(number) {
+                return String.fromCharCode(97 + number);
+            }
+
+            function get_class(status) {
+                let class_name = "div-table-seat-";
+                if (status == "Open") {
+                    class_name = class_name + "open";
+                }
+                else if (status == "Hold") {
+                    class_name = class_name + "hold";
+                }
+                else {
+                    class_name = class_name + "sold";
+                }
+
+                return class_name;
+            }
+        });
+    </script>
+</html>
